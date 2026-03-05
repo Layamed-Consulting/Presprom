@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ACTION -->
+    <record id="action_prestashop_apply_promospecifique" model="ir.actions.act_window">
+        <field name="name">Appliquer Promotion</field>
+        <field name="res_model">prestashop.apply.promospecifique</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- TREE VIEW -->
+    <record id="view_prestashop_apply_promospecifique_tree" model="ir.ui.view">
+        <field name="name">prestashop.apply.promospecifique.tree</field>
+        <field name="model">prestashop.apply.promospecifique</field>
+        <field name="arch" type="xml">
+            <tree>
+                <header>
+                    <button name="action_get_combination_id_queue"
+                            type="object"
+                            string="Get Variante ID"
+                            class="oe_highlight" />
+
+                    <button name="action_apply_specific_price_queue"
+                            type="object"
+                            string="Appliquer la promo"
+                            class="oe_highlight" />
+                </header>
+                <!-- <field name="id_prestashop_combination"/> -->
+                <field name="id_prestashop_product" />
+                <field name="reference"/>
+                <field name="reduction"/>
+                <field name="date_from"/>
+                <field name="date_to"/>
+                <field name="is_done"/>
+                <field name="promotion_id" />
+                <field name="is_synchronised"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- FORM VIEW -->
+    <record id="view_prestashop_apply_promospecifique_form" model="ir.ui.view">
+        <field name="name">prestashop.apply.promospecifique.form</field>
+        <field name="model">prestashop.apply.promospecifique</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <!-- <field name="id_prestashop_combination"/> -->
+                         <field name="id_prestashop_product" />
+                    </group>
+
+                    <group>
+                        <field name="reference"/>
+                        <field name="reduction"/>
+                    </group>
+
+                    <group>
+                        <field name="date_from"/>
+                        <field name="date_to" />
+                    </group>
+
+                    <group>
+                        <field name="is_done"/>
+                        <field name="promotion_id" />
+                        <field name="is_synchronised"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <menuitem id="menu_prestashop_apply_promo" name="Promotion E commerce" parent="menu_prestashop_update_root" action="action_prestashop_apply_promospecifique"/>
+
+</odoo>

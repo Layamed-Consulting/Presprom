@@ -1,0 +1,1 @@
+from . import prestashop_update_pricelist
