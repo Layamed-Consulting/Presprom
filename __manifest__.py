@@ -14,6 +14,7 @@
     'depends': ['base','product','queue_job','sale_management', 'stock', 'account'],
     'data': [
         'views/promotion.xml',
+        'security/ir.model.access.csv',
     ],
     'installable': True,
     'application': True,
