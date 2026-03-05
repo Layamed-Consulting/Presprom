@@ -69,6 +69,7 @@
             </form>
         </field>
     </record>
-    <menuitem id="menu_prestashop_apply_promo" name="Promotion E commerce" parent="menu_prestashop_update_root" action="action_prestashop_apply_promospecifique"/>
+    <menuitem  id="menu_prestashop_update_root" name="Promotion Site Web" parent="sale.sale_menu_root" sequence="41"/>
+    <menuitem id="menu_prestashop_update_item" name="Appliquer la Promo" parent="menu_prestashop_update_root" action="action_prestashop_apply_promospecifique"/>
 
 </odoo>
