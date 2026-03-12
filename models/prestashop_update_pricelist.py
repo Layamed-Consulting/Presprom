@@ -57,7 +57,10 @@ class PrestashopApplyPromospecifique(models.Model):
         string="Message d'erreur",
         readonly=True
     )
-    promotion_id = fields.Integer(string="ID Promotion", required=True)
+    promotion_id = fields.Char(
+        string="ID Promotion(s)", required=True,
+        help="ID(s) de catégorie promotion séparés par virgule. Ex: 256,245,125"
+    )
 
     def action_get_combination_id(self):
         """Get combination ID from PrestaShop by reference"""
@@ -426,11 +429,18 @@ class PrestashopApplyPromospecifique(models.Model):
             f"📊 BATCH COMPLETE: {success_count} succeeded, {skipped_count} skipped, {failed_count} failed out of {len(self)} records")
 
     def _add_promotion_category_to_product(self, product_id):
-        """Add Promotion category to product WITHOUT breaking data"""
+        """Add Promotion category(ies) to product WITHOUT breaking data"""
         try:
-            _logger.info(f"Adding Promotion category to product {product_id}")
+            _logger.info(f"Adding Promotion category(ies) to product {product_id}")
 
-            promo_category_id = str(self.promotion_id)
+            # ── Parse multiple promotion IDs ──
+            promo_category_ids = {
+                str(pid).strip()
+                for pid in str(self.promotion_id).split(',')
+                if str(pid).strip()
+            }
+
+            _logger.info(f"Promotion categories to add: {promo_category_ids}")
 
             # GET product (FULL SAFE DATA)
             get_product = requests.get(
@@ -454,23 +464,37 @@ class PrestashopApplyPromospecifique(models.Model):
             visibility = product_data.findtext('visibility')
             available_for_order = product_data.findtext('available_for_order')
             id_manufacturer = product_data.findtext('id_manufacturer')
-            # add critical
             id_tax_rules_group = product_data.findtext('id_tax_rules_group')
+
+            # --- ADDITIONAL FIELDS TO PRESERVE ---
+            cache_default_attribute = product_data.findtext('cache_default_attribute') or '0'
+            location = product_data.findtext('location') or ''
+            state = product_data.findtext('state') or '1'
+            product_type = product_data.findtext('product_type') or 'standard'
+            minimal_quantity = product_data.findtext('minimal_quantity') or '1'
+            redirect_type = product_data.findtext('redirect_type') or '404'
+            show_price = product_data.findtext('show_price') or '1'
+
+            # --- MULTILINGUAL FIELDS ---
             description_nodes = product_data.findall('description/language')
             description_short_nodes = product_data.findall('description_short/language')
-            # multilanguage fields
             name_nodes = product_data.findall('name/language')
             link_nodes = product_data.findall('link_rewrite/language')
 
-            # categories
+            # ── Get existing categories ──
             categories = product_data.findall('.//associations/categories/category')
             existing_ids = {
                 c.findtext('id') for c in categories if c.find('id') is not None
             }
 
-            if promo_category_id in existing_ids:
-                _logger.info("Promotion already assigned")
+            # ── Check if ALL promo categories already assigned ──
+            if promo_category_ids.issubset(existing_ids):
+                _logger.info(f"All promotion categories already assigned to product {product_id}")
                 return True
+
+            # ── Merge existing + all promo IDs ──
+            final_ids = existing_ids | promo_category_ids
+            _logger.info(f"Final categories for product {product_id}: {final_ids}")
 
             # BUILD SAFE PUT XML
             ET.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
@@ -478,10 +502,8 @@ class PrestashopApplyPromospecifique(models.Model):
             prestashop = ET.Element('prestashop')
             product = ET.SubElement(prestashop, 'product')
 
-            # identifiers
+            # --- REQUIRED ---
             ET.SubElement(product, 'id').text = str(product_id)
-
-            # core required
             ET.SubElement(product, 'price').text = price
             ET.SubElement(product, 'reference').text = reference
             ET.SubElement(product, 'ean13').text = ean13
@@ -492,12 +514,20 @@ class PrestashopApplyPromospecifique(models.Model):
             ET.SubElement(product, 'id_manufacturer').text = id_manufacturer
             ET.SubElement(product, 'id_tax_rules_group').text = id_tax_rules_group
 
-            # multilingual name
+            # --- PRESERVED ---
+            ET.SubElement(product, 'cache_default_attribute').text = cache_default_attribute
+            ET.SubElement(product, 'location').text = location
+            ET.SubElement(product, 'state').text = state
+            ET.SubElement(product, 'product_type').text = product_type
+            ET.SubElement(product, 'minimal_quantity').text = minimal_quantity
+            ET.SubElement(product, 'redirect_type').text = redirect_type
+            ET.SubElement(product, 'show_price').text = show_price
+
+            # --- MULTILINGUAL ---
             name_el = ET.SubElement(product, 'name')
             for lang in name_nodes:
-                l = ET.SubElement(name_el, 'language', {'id': lang.get('id')})
-                l.text = lang.text
-            # all description
+                ET.SubElement(name_el, 'language', {'id': lang.get('id')}).text = lang.text
+
             desc_el = ET.SubElement(product, 'description')
             for lang in description_nodes:
                 ET.SubElement(desc_el, 'language', {'id': lang.get('id')}).text = lang.text
@@ -505,23 +535,20 @@ class PrestashopApplyPromospecifique(models.Model):
             desc_short_el = ET.SubElement(product, 'description_short')
             for lang in description_short_nodes:
                 ET.SubElement(desc_short_el, 'language', {'id': lang.get('id')}).text = lang.text
-            # multilingual link rewrite
+
             link_el = ET.SubElement(product, 'link_rewrite')
             for lang in link_nodes:
-                l = ET.SubElement(link_el, 'language', {'id': lang.get('id')})
-                l.text = lang.text
+                ET.SubElement(link_el, 'language', {'id': lang.get('id')}).text = lang.text
 
-            # categories
+            # --- CATEGORIES ---
             associations = ET.SubElement(product, 'associations')
             cats = ET.SubElement(associations, 'categories')
-
-            for cid in existing_ids | {promo_category_id}:
+            for cid in final_ids:
                 cat = ET.SubElement(cats, 'category')
                 ET.SubElement(cat, 'id').text = cid
 
             xml_data = ET.tostring(prestashop, encoding='utf-8')
 
-            # PUT update
             update_response = requests.put(
                 f"https://www.premiumshop.ma/api/products/{product_id}",
                 auth=("E93WGT9K8726WW7F8CWIXDH9VGFBLH6A", ""),
@@ -531,7 +558,7 @@ class PrestashopApplyPromospecifique(models.Model):
             )
 
             if update_response.status_code == 200:
-                _logger.info("Promotion category added safely (manufacturer preserved)")
+                _logger.info(f"✅ Promotion categories {promo_category_ids} added safely to product {product_id}")
                 return True
 
             _logger.error(update_response.text)
