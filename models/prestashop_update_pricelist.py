@@ -184,7 +184,7 @@ class PrestashopApplyPromospecifique(models.Model):
         """Apply specific price (promotion) to combination in PrestaShop"""
         self.ensure_one()
         return self._apply_specific_price_internal()
-
+    '''
     def _check_specific_price_exists(self, product_id):
         """Check if a specific price already exists for this product"""
         try:
@@ -217,7 +217,7 @@ class PrestashopApplyPromospecifique(models.Model):
         except Exception as e:
             _logger.error(f"❌ Error checking specific price: {str(e)}")
             return False
-
+    '''
     def _apply_specific_price_internal(self):
         """Internal method - does the actual work without ensure_one"""
         if not self.id_prestashop_product or self.id_prestashop_product == 0:
@@ -225,27 +225,6 @@ class PrestashopApplyPromospecifique(models.Model):
 
         if self.reduction <= 0 or self.reduction > 1:
             raise UserError("La réduction doit être entre 0 et 1 (ex: 0.20 pour 20%)")
-
-        # Check if specific price already exists for this product
-        if self._check_specific_price_exists(self.id_prestashop_product):
-            _logger.info(f"⚠️ Specific price already exists for product {self.id_prestashop_product}, skipping...")
-            self.write({
-                'is_done': True,
-                'is_synchronised': True,
-                'error_message': 'Prix spécifique déjà existant pour ce produit'
-            })
-            return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': 'Déjà Existant',
-                    'message': f'Un prix spécifique existe déjà pour le produit {self.id_prestashop_product}',
-                    'type': 'warning',
-                    'sticky': False,
-                }
-            }
-
-        _logger.info(f"Applying specific price for combination {self.id_prestashop_product}")
 
         try:
             # Format dates
@@ -397,25 +376,10 @@ class PrestashopApplyPromospecifique(models.Model):
         """Job method to process a batch of specific prices"""
         success_count = 0
         failed_count = 0
-        skipped_count = 0
 
         for record in self:
             try:
                 _logger.info(f"🔄 BATCH JOB: Applying specific price for reference: {record.reference}")
-
-                # Check if specific price already exists
-                if record._check_specific_price_exists(record.id_prestashop_product):
-                    skipped_count += 1
-                    _logger.info(
-                        f"⏭️ Skipped ({skipped_count}/{len(self)}): {record.reference} - Already has specific price")
-                    record.write({
-                        'is_done': True,
-                        'is_synchronised': True,
-                        'error_message': 'Prix spécifique déjà existant pour ce produit'
-                    })
-                    continue
-
-                # Call internal method instead of action_apply_specific_price
                 record._apply_specific_price_internal()
                 success_count += 1
                 _logger.info(f"✅ Success ({success_count}/{len(self)}): {record.reference}")
@@ -423,10 +387,8 @@ class PrestashopApplyPromospecifique(models.Model):
                 failed_count += 1
                 _logger.error(f"❌ Failed ({failed_count}/{len(self)}): {record.reference} - {str(e)}")
                 record.write({'error_message': f"Batch job failed: {str(e)}"})
-                # Don't raise - continue processing other records in batch
 
-        _logger.info(
-            f"📊 BATCH COMPLETE: {success_count} succeeded, {skipped_count} skipped, {failed_count} failed out of {len(self)} records")
+        _logger.info(f"📊 BATCH COMPLETE: {success_count} succeeded, {failed_count} failed out of {len(self)} records")
 
     def _add_promotion_category_to_product(self, product_id):
         """Add Promotion category(ies) to product WITHOUT breaking data"""
